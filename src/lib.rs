@@ -18,13 +18,15 @@ mod phavault {
     };
     use fastrand::Rng as FastRng;
     use ink::prelude::collections::BTreeMap;
-    use ink::storage::traits::StorageLayout;
     use scale::{Decode, Encode};
     use serde::{Deserialize, Serialize};
     use serde_json_core::*;
     use zeroize::Zeroize;
 
-    #[derive(Debug, PartialEq, Eq, Encode, Decode)]
+    #[cfg(feature = "std")]
+    use ink::storage::traits::StorageLayout;
+
+    #[derive(Decode, Encode, Clone, Serialize, Deserialize)]
     #[cfg_attr(feature = "std", derive(scale_info::TypeInfo))]
     pub enum Error {
         // User errors
@@ -46,6 +48,7 @@ mod phavault {
         // Secret errors
         SecretNotFound,
         SecretFieldNotFound,
+        InvalidSecretType,
 
         //Serde errors
         FailedToSerialize,
@@ -76,7 +79,7 @@ mod phavault {
 
     #[derive(Decode, Encode, Clone, Serialize, Deserialize)]
     #[cfg_attr(feature = "std", derive(Debug, scale_info::TypeInfo, StorageLayout))]
-    pub enum Item {
+    pub enum Secret {
         SoftwareLicense {
             name: String,
             key: String,
@@ -208,10 +211,10 @@ mod phavault {
         },
     }
 
-    impl Item {
-        pub fn new(name: &str) -> Self {
+    impl Secret {
+        pub fn new(name: &str) -> Result<Self> {
             match name {
-                "login" => Self::Login {
+                "login" => Ok(Self::Login {
                     username: None,
                     password: String::new(),
                     url: None,
@@ -219,32 +222,32 @@ mod phavault {
                     tags: Vec::new(),
                     created_at: String::new(),
                     updated_at: String::new(),
-                },
-                "contact" => Self::Contact {
+                }),
+                "contact" => Ok(Self::Contact {
                     name: String::new(),
                     number: String::new(),
                     email: String::new(),
                     tags: Vec::new(),
                     created_at: String::new(),
                     updated_at: String::new(),
-                },
-                "mail" => Self::Mail {
+                }),
+                "mail" => Ok(Self::Mail {
                     id: String::new(),
                     password: String::new(),
                     notes: None,
                     tags: Vec::new(),
                     created_at: String::new(),
                     updated_at: String::new(),
-                },
-                "crypto_wallet" => Self::CryptoWallet {
+                }),
+                "crypto_wallet" => Ok(Self::CryptoWallet {
                     seed_phrase: String::new(),
                     private_key: String::new(),
                     pub_key: String::new(),
                     other_info: CustomFields::default(),
                     created_at: String::new(),
                     updated_at: String::new(),
-                },
-                "ID" => Self::ID {
+                }),
+                "ID" => Ok(Self::ID {
                     name: String::new(),
                     id_no: String::new(),
                     date_of_birth: String::new(),
@@ -254,8 +257,8 @@ mod phavault {
                     tags: Vec::new(),
                     created_at: String::new(),
                     updated_at: String::new(),
-                },
-                "card" => Self::Card {
+                }),
+                "card" => Ok(Self::Card {
                     card_name: String::new(),
                     cardholder_name: String::new(),
                     card_no: String::new(),
@@ -266,8 +269,8 @@ mod phavault {
                     tags: Vec::new(),
                     created_at: String::new(),
                     updated_at: String::new(),
-                },
-                "bank_account" => Self::BankAccount {
+                }),
+                "bank_account" => Ok(Self::BankAccount {
                     bank_name: String::new(),
                     acc_holder: String::new(),
                     acc_no: String::new(),
@@ -277,15 +280,15 @@ mod phavault {
                     tags: Vec::new(),
                     created_at: String::new(),
                     updated_at: String::new(),
-                },
-                "secure_note" => Self::SecureNote {
+                }),
+                "secure_note" => Ok(Self::SecureNote {
                     title: None,
                     note: String::new(),
                     tags: Vec::new(),
                     created_at: String::new(),
                     updated_at: String::new(),
-                },
-                "driver_license" => Self::DriverLicense {
+                }),
+                "driver_license" => Ok(Self::DriverLicense {
                     id: String::new(),
                     category: String::new(),
                     id_type: String::new(),
@@ -295,8 +298,8 @@ mod phavault {
                     tags: Vec::new(),
                     created_at: String::new(),
                     updated_at: String::new(),
-                },
-                "software_license" => Self::SoftwareLicense {
+                }),
+                "software_license" => Ok(Self::SoftwareLicense {
                     name: String::new(),
                     key: String::new(),
                     validity: String::new(),
@@ -306,8 +309,8 @@ mod phavault {
                     tags: Vec::new(),
                     created_at: String::new(),
                     updated_at: String::new(),
-                },
-                "ssh" => Self::SSHKey {
+                }),
+                "ssh" => Ok(Self::SSHKey {
                     username: None,
                     email: None,
                     pub_key: String::new(),
@@ -316,24 +319,16 @@ mod phavault {
                     tags: Vec::new(),
                     created_at: String::new(),
                     updated_at: String::new(),
-                },
-                "wifi" => Self::WifiPassword {
+                }),
+                "wifi" => Ok(Self::WifiPassword {
                     network_name: String::new(),
                     password: String::new(),
                     other_info: CustomFields::default(),
                     created_at: String::new(),
                     updated_at: String::new(),
-                },
+                }),
                 // input should match with any one of the above cases. should not reach here.
-                _ => Self::Login {
-                    username: None,
-                    password: String::new(),
-                    url: None,
-                    notes: None,
-                    tags: Vec::new(),
-                    created_at: String::new(),
-                    updated_at: String::new(),
-                },
+                _ => Err(Error::InvalidSecretType),
             }
         }
     }
@@ -341,13 +336,18 @@ mod phavault {
     #[derive(Decode, Encode, Default, Clone, Serialize, Deserialize)]
     #[cfg_attr(feature = "std", derive(Debug, scale_info::TypeInfo, StorageLayout))]
     pub struct Vault {
-        vault: BTreeMap<String, Item>,
+        vault: BTreeMap<String, Secret>,
     }
 
     #[derive(Decode, Encode, Default, Clone, Serialize, Deserialize)]
     #[cfg_attr(feature = "std", derive(Debug, scale_info::TypeInfo, StorageLayout))]
     pub struct VaultList {
         vaults: BTreeMap<String, Vault>,
+    }
+
+    pub enum UpdateVault {
+        ADD,
+        MODIFY,
     }
 
     // Vault encrypted
@@ -359,6 +359,7 @@ mod phavault {
         nonce: Vec<u8>,
     }
 
+    // Vault list encrypted
     #[derive(Decode, Encode, Default, Clone, Serialize, Deserialize)]
     #[cfg_attr(feature = "std", derive(Debug, scale_info::TypeInfo, StorageLayout))]
     pub struct EncryptedVaultInfoList {
@@ -381,8 +382,8 @@ mod phavault {
         pub fn new() -> Self {
             let entropy1 = Self::env().block_timestamp();
             let entropy2 = Self::env().block_number();
-            let entropy = (entropy1 ^ entropy2 as u64) | (entropy1 & entropy2 as u64);
-            let mut rng = FastRng::with_seed(entropy);
+            let seed = (entropy1 ^ entropy2 as u64) | (entropy1 & entropy2 as u64);
+            let mut rng = FastRng::with_seed(seed);
             let randomized = rng.u64(..);
 
             Self {
@@ -415,816 +416,97 @@ mod phavault {
         }
 
         #[ink(message, payable)]
-        pub fn add_item(
+        pub fn add_secret(
             &mut self,
             vault_name: String,
-            item_name: String,
-            field: VecTuple,
-            item_type: String,
+            secret_name: String,
+            fields: VecTuple,
+            secret_type: String,
         ) -> Result<()> {
             let caller = self.env().caller();
             if !self.vaults.contains_key(&caller) {
                 return Err(Error::UserNotFound);
             } else {
-                // decrypt user's vault.
-                let mut get_vaults = self
+                let (_, mut get_vaults) = self
                     .vaults
                     .remove_entry(&caller)
                     .ok_or(Error::UserNotFound)?;
                 let get_vault = get_vaults
-                    .1
                     .encrypted_vaults
                     .get_mut(&vault_name)
                     .ok_or(Error::VaultNotFound)?;
                 let mut decrypted = self.decrypt_vault(get_vault.clone())?;
 
-                match item_type.as_str() {
-                    "login" => {
-                        let mut login = Item::new("login");
-                        if let Item::Login {
-                            username,
-                            password,
-                            url,
-                            notes,
-                            tags,
-                            created_at,
-                            updated_at,
-                        } = &mut login
-                        {
-                            for (field_name, value) in field.into_iter() {
-                                match field_name.as_str() {
-                                    "username" => *username = Some(value),
-                                    "password" => {
-                                        if !is_password_strong(value.to_owned()) {
-                                            return Err(Error::InsecurePassword);
-                                        } else {
-                                            *password = value;
-                                        }
-                                    }
-                                    "url" => *url = Some(value),
-                                    "notes" => *notes = Some(value),
-                                    "tags" => tags.push(Some(value)),
-                                    "created_at" => {
-                                        *created_at = value.clone();
-                                        *updated_at = value;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        decrypted.vault.insert(item_name, login);
-                        *get_vault = self.encrypt_vault(decrypted)?;
-                        self.vaults.insert(get_vaults.0, get_vaults.1);
-                    }
-                    "contact" => {
-                        let mut contact = Item::new("contact");
-                        if let Item::Contact {
-                            name,
-                            number,
-                            email,
-                            tags,
-                            created_at,
-                            updated_at,
-                        } = &mut contact
-                        {
-                            for (field_name, value) in field.into_iter() {
-                                match field_name.as_str() {
-                                    "name" => *name = value,
-                                    "number" => *number = value,
-                                    "email" => *email = value,
-                                    "tag" => tags.push(Some(value)),
-                                    "created_at" => {
-                                        *created_at = value.clone();
-                                        *updated_at = value;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        decrypted.vault.insert(item_name, contact);
-                        *get_vault = self.encrypt_vault(decrypted)?;
-                        self.vaults.insert(get_vaults.0, get_vaults.1);
-                    }
-                    "mail" => {
-                        let mut mail = Item::new("mail");
-                        if let Item::Mail {
-                            id,
-                            password,
-                            notes,
-                            tags,
-                            created_at,
-                            updated_at,
-                        } = &mut mail
-                        {
-                            for (field_name, value) in field.into_iter() {
-                                match field_name.as_str() {
-                                    "id" => *id = value,
-                                    "password" => {
-                                        if !is_password_strong(field_name.to_owned()) {
-                                            return Err(Error::InsecurePassword);
-                                        } else {
-                                            *password = value;
-                                        }
-                                    }
-                                    "notes" => *notes = Some(value),
-                                    "tag" => tags.push(Some(value)),
-                                    "created_at" => {
-                                        *created_at = value.clone();
-                                        *updated_at = value;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        decrypted.vault.insert(item_name, mail);
-                        *get_vault = self.encrypt_vault(decrypted)?;
-                        self.vaults.insert(get_vaults.0, get_vaults.1);
-                    }
-                    "crypto_wallet" => {
-                        let mut wallet = Item::new("crypto_wallet");
-                        if let Item::CryptoWallet {
-                            seed_phrase,
-                            private_key,
-                            pub_key,
-                            other_info,
-                            created_at,
-                            updated_at,
-                        } = &mut wallet
-                        {
-                            for (field_name, value) in field.into_iter() {
-                                match field_name.as_str() {
-                                    "seed_phrase" => *seed_phrase = value,
-                                    "private_key" => *private_key = value,
-                                    "pub_key" => *pub_key = value,
-                                    "other_info" => {
-                                        let deserialized = from_str::<CustomFields>(&value)
-                                            .map_err(|_| Error::FailedToDeserialize)?;
-                                        for sub_item in deserialized.0.fields.into_iter() {
-                                            other_info.fields.push(sub_item);
-                                        }
-                                    }
-                                    "created_at" => {
-                                        *created_at = value.clone();
-                                        *updated_at = value;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        decrypted.vault.insert(item_name, wallet);
-                        *get_vault = self.encrypt_vault(decrypted)?;
-                        self.vaults.insert(get_vaults.0, get_vaults.1);
-                    }
-                    "secure_note" => {
-                        let mut notes = Item::new("secure_note");
-                        if let Item::SecureNote {
-                            title,
-                            note,
-                            tags,
-                            created_at,
-                            updated_at,
-                        } = &mut notes
-                        {
-                            for (field_name, value) in field.into_iter() {
-                                match field_name.as_str() {
-                                    "title" => *title = Some(value),
-                                    "note" => *note = value,
-                                    "tag" => tags.push(Some(value)),
-                                    "created_at" => {
-                                        *created_at = value.clone();
-                                        *updated_at = value;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        decrypted.vault.insert(item_name, notes);
-                        *get_vault = self.encrypt_vault(decrypted)?;
-                        self.vaults.insert(get_vaults.0, get_vaults.1);
-                    }
-                    "ID" => {
-                        let mut id = Item::new("ID");
-                        if let Item::ID {
-                            name,
-                            id_no,
-                            date_of_birth,
-                            age,
-                            address,
-                            other_info,
-                            tags,
-                            created_at,
-                            updated_at,
-                        } = &mut id
-                        {
-                            for (field_name, value) in field.into_iter() {
-                                match field_name.as_str() {
-                                    "name" => *name = value,
-                                    "id" => *id_no = value,
-                                    "dob" => *date_of_birth = value,
-                                    "age" => *age = value,
-                                    "address" => *address = Some(value),
-                                    "other_info" => {
-                                        let deserialized = from_str::<CustomFields>(&value)
-                                            .map_err(|_| Error::FailedToDeserialize)?;
-                                        for sub_item in deserialized.0.fields.into_iter() {
-                                            other_info.fields.push(sub_item);
-                                        }
-                                    }
-                                    "tag" => tags.push(Some(value)),
-                                    "created_at" => {
-                                        *created_at = value.clone();
-                                        *updated_at = value;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        decrypted.vault.insert(item_name, id);
-                        *get_vault = self.encrypt_vault(decrypted)?;
-                        self.vaults.insert(get_vaults.0, get_vaults.1);
-                    }
-                    "card" => {
-                        let mut card = Item::new("card");
-                        if let Item::Card {
-                            card_name,
-                            cardholder_name,
-                            card_no,
-                            security_code,
-                            expiration_month,
-                            expiration_year,
-                            pin,
-                            tags,
-                            created_at,
-                            updated_at,
-                        } = &mut card
-                        {
-                            for (field_name, value) in field.into_iter() {
-                                match field_name.as_str() {
-                                    "cardname" => *card_name = value,
-                                    "cardholder" => *cardholder_name = value,
-                                    "card_no" => *card_no = value,
-                                    "security_code" => *security_code = value,
-                                    "expiration_month" => *expiration_month = value,
-                                    "expiration_year" => *expiration_year = value,
-                                    "pin" => *pin = Some(value),
-                                    "tag" => tags.push(Some(value)),
-                                    "created_at" => {
-                                        *created_at = value.clone();
-                                        *updated_at = value;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        decrypted.vault.insert(item_name, card);
-                        *get_vault = self.encrypt_vault(decrypted)?;
-                        self.vaults.insert(get_vaults.0, get_vaults.1);
-                    }
-                    "bank_account" => {
-                        let mut account = Item::new("bank_account");
-                        if let Item::BankAccount {
-                            bank_name,
-                            acc_holder,
-                            acc_no,
-                            branch,
-                            login,
-                            other_info,
-                            tags,
-                            created_at,
-                            updated_at,
-                        } = &mut account
-                        {
-                            for (field_name, value) in field.into_iter() {
-                                match field_name.as_str() {
-                                    "bank_name" => *bank_name = value,
-                                    "acc_holder" => *acc_holder = value,
-                                    "acc_no" => *acc_no = value,
-                                    "branch" => *branch = value,
-                                    "login" => {
-                                        let deserialized = from_str::<Credential>(&value)
-                                            .map_err(|_| Error::FailedToDeserialize)?;
-                                        *login = Some(deserialized.0);
-                                    }
-                                    "other_info" => {
-                                        let deserialized = from_str::<CustomFields>(&value)
-                                            .map_err(|_| Error::FailedToDeserialize)?;
-                                        for sub_item in deserialized.0.fields.into_iter() {
-                                            other_info.fields.push(sub_item);
-                                        }
-                                    }
-                                    "tag" => tags.push(Some(value)),
-                                    "created_at" => {
-                                        *created_at = value.clone();
-                                        *updated_at = value;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        decrypted.vault.insert(item_name, account);
-                        *get_vault = self.encrypt_vault(decrypted)?;
-                        self.vaults.insert(get_vaults.0, get_vaults.1);
-                    }
-                    "driver_license" => {
-                        let mut license = Item::new("driver_license");
-                        if let Item::DriverLicense {
-                            id,
-                            category,
-                            id_type,
-                            date_of_issue,
-                            valid_till,
-                            other_info,
-                            tags,
-                            created_at,
-                            updated_at,
-                        } = &mut license
-                        {
-                            for (field_name, value) in field.into_iter() {
-                                match field_name.as_str() {
-                                    "id" => *id = value,
-                                    "category" => *category = value,
-                                    "id_type" => *id_type = value,
-                                    "date_of_issue" => *date_of_issue = value,
-                                    "validity" => *valid_till = value,
-                                    "other_info" => *other_info = Some(value),
-                                    "tag" => tags.push(Some(value)),
-                                    "updated_at" => {
-                                        *created_at = value.clone();
-                                        *updated_at = value;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        decrypted.vault.insert(item_name, license);
-                        *get_vault = self.encrypt_vault(decrypted)?;
-                        self.vaults.insert(get_vaults.0, get_vaults.1);
-                    }
-                    "software_license" => {
-                        let mut license = Item::new("software_license");
-                        if let Item::SoftwareLicense {
-                            name,
-                            key,
-                            validity,
-                            provider,
-                            url,
-                            other_info,
-                            tags,
-                            created_at,
-                            updated_at,
-                        } = &mut license
-                        {
-                            for (field_name, value) in field.into_iter() {
-                                match field_name.as_str() {
-                                    "name" => *name = value,
-                                    "key" => *key = value,
-                                    "validity" => *validity = value,
-                                    "provider" => *provider = Some(value),
-                                    "url" => *url = Some(value),
-                                    "other_info" => {
-                                        let deserialized = from_str::<CustomFields>(&value)
-                                            .map_err(|_| Error::FailedToDeserialize)?;
-                                        for sub_item in deserialized.0.fields.into_iter() {
-                                            other_info.fields.push(sub_item);
-                                        }
-                                    }
-                                    "tag" => tags.push(Some(value)),
-                                    "updated_at" => {
-                                        *created_at = value.clone();
-                                        *updated_at = value;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        decrypted.vault.insert(item_name, license);
-                        *get_vault = self.encrypt_vault(decrypted)?;
-                        self.vaults.insert(get_vaults.0, get_vaults.1);
-                    }
-                    "wifi" => {
-                        let mut wifi = Item::new("wifi");
-                        if let Item::WifiPassword {
-                            network_name,
-                            password,
-                            other_info,
-                            created_at,
-                            updated_at,
-                        } = &mut wifi
-                        {
-                            for (field_name, value) in field.into_iter() {
-                                match field_name.as_str() {
-                                    "network" => *network_name = value,
-                                    "password" => *password = value,
-                                    "other_info" => {
-                                        let deserialized = from_str::<CustomFields>(&value)
-                                            .map_err(|_| Error::FailedToDeserialize)?;
-                                        for sub_item in deserialized.0.fields.into_iter() {
-                                            other_info.fields.push(sub_item);
-                                        }
-                                    }
-                                    "created_at" => {
-                                        *created_at = value.clone();
-                                        *updated_at = value;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        decrypted.vault.insert(item_name, wifi);
-                        *get_vault = self.encrypt_vault(decrypted)?;
-                        self.vaults.insert(get_vaults.0, get_vaults.1);
-                    }
-                    "ssh" => {
-                        let mut ssh = Item::new("ssh");
-                        if let Item::SSHKey {
-                            username,
-                            email,
-                            pub_key,
-                            private_key,
-                            others,
-                            tags,
-                            created_at,
-                            updated_at,
-                        } = &mut ssh
-                        {
-                            for (field_name, value) in field.into_iter() {
-                                match field_name.as_str() {
-                                    "username" => *username = Some(value),
-                                    "email" => *email = Some(value),
-                                    "pub_key" => *pub_key = value,
-                                    "private_key" => *private_key = value,
-                                    "other_info" => {
-                                        let deserialized = from_str::<CustomFields>(&value)
-                                            .map_err(|_| Error::FailedToDeserialize)?;
-                                        for sub_item in deserialized.0.fields.into_iter() {
-                                            others.fields.push(sub_item);
-                                        }
-                                    }
-                                    "tag" => tags.push(Some(value)),
-                                    "created_at" => {
-                                        *created_at = value.clone();
-                                        *updated_at = value;
-                                    }
-                                    _ => {}
-                                }
-                            }
-                        }
-                        decrypted.vault.insert(item_name, ssh);
-                        *get_vault = self.encrypt_vault(decrypted)?;
-                        self.vaults.insert(get_vaults.0, get_vaults.1);
-                    }
-                    _ => {}
-                }
+                let mut secret = Secret::new(&secret_type)?;
+                Self::update_vault(&mut secret, fields, UpdateVault::ADD)?;
+
+                decrypted.vault.insert(secret_name, secret);
+                *get_vault = self.encrypt_vault(decrypted)?;
+
+                self.vaults.insert(caller, get_vaults);
             };
             return Ok(());
         }
 
         #[ink(message, payable)]
-        pub fn modify_item(
+        pub fn modify_secret(
             &mut self,
             vault_name: String,
-            item_name: String,
-            field: VecTuple,
+            secret_name: String,
+            fields: VecTuple,
         ) -> Result<()> {
             let caller = self.env().caller();
             if self.is_user(caller) {
-                let get_vaults = self.vaults.get(&caller).ok_or(Error::VaultNotFound)?;
+                let (_, mut get_vaults) = self
+                    .vaults
+                    .remove_entry(&caller)
+                    .ok_or(Error::VaultNotFound)?;
                 let get_vault = get_vaults
                     .encrypted_vaults
-                    .get(&vault_name)
+                    .get_mut(&vault_name)
                     .ok_or(Error::VaultNotFound)?;
                 let mut decrypted = self.decrypt_vault(get_vault.clone())?;
 
-                let item = decrypted
+                let secret = decrypted
                     .vault
-                    .get_mut(&item_name)
+                    .get_mut(&secret_name)
                     .ok_or(Error::SecretNotFound)?;
 
-                match item {
-                    Item::Login {
-                        username,
-                        password,
-                        url,
-                        notes,
-                        tags,
-                        created_at: _,
-                        updated_at,
-                    } => {
-                        for (field_name, value) in field.into_iter() {
-                            match field_name.as_str() {
-                                "username" => *username = Some(value),
-                                "password" => {
-                                    if !is_password_strong(value.to_owned()) {
-                                        return Err(Error::InsecurePassword);
-                                    } else {
-                                        *password = value;
-                                    }
-                                }
-                                "url" => *url = Some(value),
-                                "notes" => *notes = Some(value),
-                                "tags" => tags.push(Some(value)),
-                                "updated_at" => *updated_at = value,
-                                _ => {}
-                            }
-                        }
-                    }
-                    Item::Contact {
-                        name,
-                        number,
-                        email,
-                        tags,
-                        created_at: _,
-                        updated_at,
-                    } => {
-                        for (field_name, value) in field.into_iter() {
-                            match field_name.as_str() {
-                                "name" => *name = value,
-                                "number" => *number = value,
-                                "email" => *email = value,
-                                "tag" => tags.push(Some(value)),
-                                "updated_at" => *updated_at = value,
-                                _ => {}
-                            }
-                        }
-                    }
-                    Item::Mail {
-                        id,
-                        password,
-                        notes,
-                        tags,
-                        created_at: _,
-                        updated_at,
-                    } => {
-                        for (field_name, value) in field.into_iter() {
-                            match field_name.as_str() {
-                                "id" => *id = value,
-                                "password" => {
-                                    if !is_password_strong(field_name.to_owned()) {
-                                        return Err(Error::InsecurePassword);
-                                    } else {
-                                        *password = value;
-                                    }
-                                }
-                                "notes" => *notes = Some(value),
-                                "tag" => tags.push(Some(value)),
-                                "updated_at" => *updated_at = value,
-                                _ => {}
-                            }
-                        }
-                    }
+                let secret_type = match secret.clone() {
+                    Secret::Login { .. } => "login",
+                    Secret::WifiPassword { .. } => "wifi",
+                    Secret::DriverLicense { .. } => "driver_license",
+                    Secret::SoftwareLicense { .. } => "software_license",
+                    Secret::Card { .. } => "card",
+                    Secret::BankAccount { .. } => "bank_account",
+                    Secret::CryptoWallet { .. } => "crypto_wallet",
+                    Secret::Mail { .. } => "mail",
+                    Secret::SecureNote { .. } => "secure_note",
+                    Secret::SSHKey { .. } => "ssh",
+                    Secret::ID { .. } => "ID",
+                    Secret::Contact { .. } => "contact",
+                };
 
-                    Item::CryptoWallet {
-                        seed_phrase,
-                        private_key,
-                        pub_key,
-                        other_info,
-                        created_at: _,
-                        updated_at,
-                    } => {
-                        for (field_name, value) in field.into_iter() {
-                            match field_name.as_str() {
-                                "seed_phrase" => *seed_phrase = value,
-                                "private_key" => *private_key = value,
-                                "pub_key" => *pub_key = value,
-                                "other_info" => {
-                                    let deserialized = from_str::<CustomFields>(&value)
-                                        .map_err(|_| Error::FailedToDeserialize)?;
-                                    for sub_item in deserialized.0.fields.into_iter() {
-                                        other_info.fields.push(sub_item);
-                                    }
-                                }
-                                "updated_at" => *updated_at = value,
-                                _ => {}
-                            }
-                        }
-                    }
-                    Item::SecureNote {
-                        title,
-                        note,
-                        tags,
-                        created_at: _,
-                        updated_at,
-                    } => {
-                        for (field_name, value) in field.into_iter() {
-                            match field_name.as_str() {
-                                "title" => *title = Some(value),
-                                "note" => *note = value,
-                                "tag" => tags.push(Some(value)),
-                                "updated_at" => *updated_at = value,
-                                "created_at" => {}
-                                _ => {}
-                            }
-                        }
-                    }
-                    Item::ID {
-                        name,
-                        id_no,
-                        date_of_birth,
-                        age,
-                        address,
-                        other_info,
-                        tags,
-                        created_at: _,
-                        updated_at,
-                    } => {
-                        for (field_name, value) in field.into_iter() {
-                            match field_name.as_str() {
-                                "name" => *name = value,
-                                "id" => *id_no = value,
-                                "dob" => *date_of_birth = value,
-                                "age" => *age = value,
-                                "address" => *address = Some(value),
-                                "other_info" => {
-                                    let deserialized = from_str::<CustomFields>(&value)
-                                        .map_err(|_| Error::FailedToDeserialize)?;
-                                    for sub_item in deserialized.0.fields.into_iter() {
-                                        other_info.fields.push(sub_item);
-                                    }
-                                }
-                                "tag" => tags.push(Some(value)),
-                                "updated_at" => *updated_at = value,
-                                _ => {}
-                            }
-                        }
-                    }
+                let mut new_instance = Secret::new(secret_type)?;
 
-                    Item::Card {
-                        card_name,
-                        cardholder_name,
-                        card_no,
-                        security_code,
-                        expiration_month,
-                        expiration_year,
-                        pin,
-                        tags,
-                        created_at: _,
-                        updated_at,
-                    } => {
-                        for (field_name, value) in field.into_iter() {
-                            match field_name.as_str() {
-                                "cardname" => *card_name = value,
-                                "cardholder" => *cardholder_name = value,
-                                "card_no" => *card_no = value,
-                                "security_code" => *security_code = value,
-                                "expiration_month" => *expiration_month = value,
-                                "expiration_year" => *expiration_year = value,
-                                "pin" => *pin = Some(value),
-                                "tag" => tags.push(Some(value)),
-                                "updated_at" => *updated_at = value,
-                                _ => {}
-                            }
-                        }
-                    }
-                    Item::BankAccount {
-                        bank_name,
-                        acc_holder,
-                        acc_no,
-                        branch,
-                        login,
-                        other_info,
-                        tags,
-                        created_at: _,
-                        updated_at,
-                    } => {
-                        for (field_name, value) in field.into_iter() {
-                            match field_name.as_str() {
-                                "bank_name" => *bank_name = value,
-                                "acc_holder" => *acc_holder = value,
-                                "acc_no" => *acc_no = value,
-                                "branch" => *branch = value,
-                                "login" => {
-                                    let deserialized = from_str::<Credential>(&value)
-                                        .map_err(|_| Error::FailedToDeserialize)?;
-                                    *login = Some(deserialized.0);
-                                }
-                                "other_info" => {
-                                    let deserialized = from_str::<CustomFields>(&value)
-                                        .map_err(|_| Error::FailedToDeserialize)?;
-                                    for sub_item in deserialized.0.fields.into_iter() {
-                                        other_info.fields.push(sub_item);
-                                    }
-                                }
-                                "tag" => tags.push(Some(value)),
-                                "updated_at" => *updated_at = value,
-                                _ => {}
-                            }
-                        }
-                    }
-                    Item::DriverLicense {
-                        id,
-                        category,
-                        id_type,
-                        date_of_issue,
-                        valid_till,
-                        other_info,
-                        tags,
-                        created_at: _,
-                        updated_at,
-                    } => {
-                        for (field_name, value) in field.into_iter() {
-                            match field_name.as_str() {
-                                "id" => *id = value,
-                                "category" => *category = value,
-                                "id_type" => *id_type = value,
-                                "date_of_issue" => *date_of_issue = value,
-                                "validity" => *valid_till = value,
-                                "other_info" => *other_info = Some(value),
-                                "tag" => tags.push(Some(value)),
-                                "updated_at" => *updated_at = value,
-                                _ => {}
-                            }
-                        }
-                    }
-                    Item::SoftwareLicense {
-                        name,
-                        key,
-                        validity,
-                        provider,
-                        url,
-                        other_info,
-                        tags,
-                        created_at: _,
-                        updated_at,
-                    } => {
-                        for (field_name, value) in field.into_iter() {
-                            match field_name.as_str() {
-                                "name" => *name = value,
-                                "key" => *key = value,
-                                "validity" => *validity = value,
-                                "provider" => *provider = Some(value),
-                                "url" => *url = Some(value),
-                                "other_info" => {
-                                    let deserialized = from_str::<CustomFields>(&value)
-                                        .map_err(|_| Error::FailedToDeserialize)?;
-                                    for sub_item in deserialized.0.fields.into_iter() {
-                                        other_info.fields.push(sub_item);
-                                    }
-                                }
-                                "tag" => tags.push(Some(value)),
-                                "updated_at" => *updated_at = value,
-                                _ => {}
-                            }
-                        }
-                    }
-                    Item::WifiPassword {
-                        network_name,
-                        password,
-                        other_info,
-                        created_at: _,
-                        updated_at,
-                    } => {
-                        for (field_name, value) in field.into_iter() {
-                            match field_name.as_str() {
-                                "network" => *network_name = value,
-                                "password" => *password = value,
-                                "other_info" => {
-                                    let deserialized = from_str::<CustomFields>(&value)
-                                        .map_err(|_| Error::FailedToDeserialize)?;
-                                    for sub_item in deserialized.0.fields.into_iter() {
-                                        other_info.fields.push(sub_item);
-                                    }
-                                }
-                                "updated_at" => *updated_at = value,
-                                _ => {}
-                            }
-                        }
-                    }
-                    Item::SSHKey {
-                        username,
-                        email,
-                        pub_key,
-                        private_key,
-                        others,
-                        tags,
-                        created_at: _,
-                        updated_at,
-                    } => {
-                        for (field_name, value) in field.into_iter() {
-                            match field_name.as_str() {
-                                "username" => *username = Some(value),
-                                "email" => *email = Some(value),
-                                "pub_key" => *pub_key = value,
-                                "private_key" => *private_key = value,
-                                "other_info" => {
-                                    let deserialized = from_str::<CustomFields>(&value)
-                                        .map_err(|_| Error::FailedToDeserialize)?;
-                                    for sub_item in deserialized.0.fields.into_iter() {
-                                        others.fields.push(sub_item);
-                                    }
-                                }
-                                "tag" => tags.push(Some(value)),
-                                "updated_at" => *updated_at = value,
-                                _ => {}
-                            }
-                        }
-                    }
-                }
-            };
-            return Ok(());
+                Self::update_vault(&mut new_instance, fields, UpdateVault::MODIFY)?;
+
+                *secret = new_instance;
+
+                let encrypted = self.encrypt_vault(decrypted)?;
+
+                *get_vault = encrypted;
+
+                self.vaults.insert(caller, get_vaults);
+
+                return Ok(());
+            } else {
+                return Err(Error::UserNotFound);
+            }
         }
 
         #[ink(message, payable)]
-        pub fn delete_item(&mut self, item: String, vault: String) -> Result<()> {
+        pub fn delete_secret(&mut self, secret_name: String, vault_name: String) -> Result<()> {
             let caller = self.env().caller();
             if !self.is_user(caller) {
                 return Err(Error::UserNotFound);
@@ -1236,11 +518,11 @@ mod phavault {
                 let get_vault = get_vaults
                     .1
                     .encrypted_vaults
-                    .get_mut(&vault)
+                    .get_mut(&vault_name)
                     .ok_or(Error::VaultNotFound)?;
                 let mut decrypted = self.decrypt_vault(get_vault.clone())?;
 
-                let remove_secret = decrypted.vault.remove_entry(&item);
+                let remove_secret = decrypted.vault.remove_entry(&secret_name);
 
                 match remove_secret {
                     Some(_) => {
@@ -1261,6 +543,463 @@ mod phavault {
                     }
                 }
             }
+        }
+
+        fn update_vault(
+            secret: &mut Secret,
+            fields: VecTuple,
+            mutate_type: UpdateVault,
+        ) -> Result<Secret> {
+            let secret_cloned = secret.clone();
+            match secret_cloned {
+                Secret::Login { .. } => {
+                    if let Secret::Login {
+                        username,
+                        password,
+                        url,
+                        notes,
+                        tags,
+                        created_at,
+                        updated_at,
+                    } = secret
+                    {
+                        for (field_name, value) in fields.into_iter() {
+                            match field_name.as_str() {
+                                "username" => *username = Some(value),
+                                "password" => {
+                                    if !is_password_strong(value.to_owned()) {
+                                        return Err(Error::InsecurePassword);
+                                    } else {
+                                        *password = value;
+                                    }
+                                }
+                                "url" => *url = Some(value),
+                                "notes" => *notes = Some(value),
+                                "tags" => tags.push(Some(value)),
+                                "created_at" => match mutate_type {
+                                    UpdateVault::ADD => {
+                                        *created_at = value.clone();
+                                        *updated_at = value;
+                                    }
+                                    UpdateVault::MODIFY => {
+                                        *updated_at = value;
+                                    }
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                Secret::Contact { .. } => {
+                    if let Secret::Contact {
+                        name,
+                        number,
+                        email,
+                        tags,
+                        created_at,
+                        updated_at,
+                    } = secret
+                    {
+                        for (field_name, value) in fields.into_iter() {
+                            match field_name.as_str() {
+                                "name" => *name = value,
+                                "number" => *number = value,
+                                "email" => *email = value,
+                                "tag" => tags.push(Some(value)),
+                                "created_at" => match mutate_type {
+                                    UpdateVault::ADD => {
+                                        *created_at = value.clone();
+                                        *updated_at = value;
+                                    }
+                                    UpdateVault::MODIFY => {
+                                        *updated_at = value;
+                                    }
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                Secret::Mail { .. } => {
+                    if let Secret::Mail {
+                        id,
+                        password,
+                        notes,
+                        tags,
+                        created_at,
+                        updated_at,
+                    } = secret
+                    {
+                        for (field_name, value) in fields.into_iter() {
+                            match field_name.as_str() {
+                                "id" => *id = value,
+                                "password" => {
+                                    if !is_password_strong(field_name.to_owned()) {
+                                        return Err(Error::InsecurePassword);
+                                    } else {
+                                        *password = value;
+                                    }
+                                }
+                                "notes" => *notes = Some(value),
+                                "tag" => tags.push(Some(value)),
+                                "created_at" => match mutate_type {
+                                    UpdateVault::ADD => {
+                                        *created_at = value.clone();
+                                        *updated_at = value;
+                                    }
+                                    UpdateVault::MODIFY => {
+                                        *updated_at = value;
+                                    }
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                Secret::CryptoWallet { .. } => {
+                    if let Secret::CryptoWallet {
+                        seed_phrase,
+                        private_key,
+                        pub_key,
+                        other_info,
+                        created_at,
+                        updated_at,
+                    } = secret
+                    {
+                        for (field_name, value) in fields.into_iter() {
+                            match field_name.as_str() {
+                                "seed_phrase" => *seed_phrase = value,
+                                "private_key" => *private_key = value,
+                                "pub_key" => *pub_key = value,
+                                "other_info" => {
+                                    let deserialized = from_str::<CustomFields>(&value)
+                                        .map_err(|_| Error::FailedToDeserialize)?;
+                                    for sub_secret in deserialized.0.fields.into_iter() {
+                                        other_info.fields.push(sub_secret);
+                                    }
+                                }
+                                "created_at" => match mutate_type {
+                                    UpdateVault::ADD => {
+                                        *created_at = value.clone();
+                                        *updated_at = value;
+                                    }
+                                    UpdateVault::MODIFY => {
+                                        *updated_at = value;
+                                    }
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                Secret::SecureNote { .. } => {
+                    if let Secret::SecureNote {
+                        title,
+                        note,
+                        tags,
+                        created_at,
+                        updated_at,
+                    } = secret
+                    {
+                        for (field_name, value) in fields.into_iter() {
+                            match field_name.as_str() {
+                                "title" => *title = Some(value),
+                                "note" => *note = value,
+                                "tag" => tags.push(Some(value)),
+                                "created_at" => match mutate_type {
+                                    UpdateVault::ADD => {
+                                        *created_at = value.clone();
+                                        *updated_at = value;
+                                    }
+                                    UpdateVault::MODIFY => {
+                                        *updated_at = value;
+                                    }
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                Secret::ID { .. } => {
+                    if let Secret::ID {
+                        name,
+                        id_no,
+                        date_of_birth,
+                        age,
+                        address,
+                        other_info,
+                        tags,
+                        created_at,
+                        updated_at,
+                    } = secret
+                    {
+                        for (field_name, value) in fields.into_iter() {
+                            match field_name.as_str() {
+                                "name" => *name = value,
+                                "id" => *id_no = value,
+                                "dob" => *date_of_birth = value,
+                                "age" => *age = value,
+                                "address" => *address = Some(value),
+                                "other_info" => {
+                                    let deserialized = from_str::<CustomFields>(&value)
+                                        .map_err(|_| Error::FailedToDeserialize)?;
+                                    for sub_secret in deserialized.0.fields.into_iter() {
+                                        other_info.fields.push(sub_secret);
+                                    }
+                                }
+                                "tag" => tags.push(Some(value)),
+                                "created_at" => match mutate_type {
+                                    UpdateVault::ADD => {
+                                        *created_at = value.clone();
+                                        *updated_at = value;
+                                    }
+                                    UpdateVault::MODIFY => {
+                                        *updated_at = value;
+                                    }
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                Secret::Card { .. } => {
+                    if let Secret::Card {
+                        card_name,
+                        cardholder_name,
+                        card_no,
+                        security_code,
+                        expiration_month,
+                        expiration_year,
+                        pin,
+                        tags,
+                        created_at,
+                        updated_at,
+                    } = secret
+                    {
+                        for (field_name, value) in fields.into_iter() {
+                            match field_name.as_str() {
+                                "cardname" => *card_name = value,
+                                "cardholder" => *cardholder_name = value,
+                                "card_no" => *card_no = value,
+                                "security_code" => *security_code = value,
+                                "expiration_month" => *expiration_month = value,
+                                "expiration_year" => *expiration_year = value,
+                                "pin" => *pin = Some(value),
+                                "tag" => tags.push(Some(value)),
+                                "created_at" => match mutate_type {
+                                    UpdateVault::ADD => {
+                                        *created_at = value.clone();
+                                        *updated_at = value;
+                                    }
+                                    UpdateVault::MODIFY => {
+                                        *updated_at = value;
+                                    }
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                Secret::BankAccount { .. } => {
+                    if let Secret::BankAccount {
+                        bank_name,
+                        acc_holder,
+                        acc_no,
+                        branch,
+                        login,
+                        other_info,
+                        tags,
+                        created_at,
+                        updated_at,
+                    } = secret
+                    {
+                        for (field_name, value) in fields.into_iter() {
+                            match field_name.as_str() {
+                                "bank_name" => *bank_name = value,
+                                "acc_holder" => *acc_holder = value,
+                                "acc_no" => *acc_no = value,
+                                "branch" => *branch = value,
+                                "login" => {
+                                    let deserialized = from_str::<Credential>(&value)
+                                        .map_err(|_| Error::FailedToDeserialize)?;
+                                    *login = Some(deserialized.0);
+                                }
+                                "other_info" => {
+                                    let deserialized = from_str::<CustomFields>(&value)
+                                        .map_err(|_| Error::FailedToDeserialize)?;
+                                    for sub_secret in deserialized.0.fields.into_iter() {
+                                        other_info.fields.push(sub_secret);
+                                    }
+                                }
+                                "tag" => tags.push(Some(value)),
+                                "created_at" => match mutate_type {
+                                    UpdateVault::ADD => {
+                                        *created_at = value.clone();
+                                        *updated_at = value;
+                                    }
+                                    UpdateVault::MODIFY => {
+                                        *updated_at = value;
+                                    }
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                Secret::DriverLicense { .. } => {
+                    if let Secret::DriverLicense {
+                        id,
+                        category,
+                        id_type,
+                        date_of_issue,
+                        valid_till,
+                        other_info,
+                        tags,
+                        created_at,
+                        updated_at,
+                    } = secret
+                    {
+                        for (field_name, value) in fields.into_iter() {
+                            match field_name.as_str() {
+                                "id" => *id = value,
+                                "category" => *category = value,
+                                "id_type" => *id_type = value,
+                                "date_of_issue" => *date_of_issue = value,
+                                "validity" => *valid_till = value,
+                                "other_info" => *other_info = Some(value),
+                                "tag" => tags.push(Some(value)),
+                                "updated_at" => match mutate_type {
+                                    UpdateVault::ADD => {
+                                        *created_at = value.clone();
+                                        *updated_at = value;
+                                    }
+                                    UpdateVault::MODIFY => {
+                                        *updated_at = value;
+                                    }
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                Secret::SoftwareLicense { .. } => {
+                    if let Secret::SoftwareLicense {
+                        name,
+                        key,
+                        validity,
+                        provider,
+                        url,
+                        other_info,
+                        tags,
+                        created_at,
+                        updated_at,
+                    } = secret
+                    {
+                        for (field_name, value) in fields.into_iter() {
+                            match field_name.as_str() {
+                                "name" => *name = value,
+                                "key" => *key = value,
+                                "validity" => *validity = value,
+                                "provider" => *provider = Some(value),
+                                "url" => *url = Some(value),
+                                "other_info" => {
+                                    let deserialized = from_str::<CustomFields>(&value)
+                                        .map_err(|_| Error::FailedToDeserialize)?;
+                                    for sub_secret in deserialized.0.fields.into_iter() {
+                                        other_info.fields.push(sub_secret);
+                                    }
+                                }
+                                "tag" => tags.push(Some(value)),
+                                "updated_at" => match mutate_type {
+                                    UpdateVault::ADD => {
+                                        *created_at = value.clone();
+                                        *updated_at = value;
+                                    }
+                                    UpdateVault::MODIFY => {
+                                        *updated_at = value;
+                                    }
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                Secret::WifiPassword { .. } => {
+                    if let Secret::WifiPassword {
+                        network_name,
+                        password,
+                        other_info,
+                        created_at,
+                        updated_at,
+                    } = secret
+                    {
+                        for (field_name, value) in fields.into_iter() {
+                            match field_name.as_str() {
+                                "network" => *network_name = value,
+                                "password" => *password = value,
+                                "other_info" => {
+                                    let deserialized = from_str::<CustomFields>(&value)
+                                        .map_err(|_| Error::FailedToDeserialize)?;
+                                    for sub_secret in deserialized.0.fields.into_iter() {
+                                        other_info.fields.push(sub_secret);
+                                    }
+                                }
+                                "created_at" => match mutate_type {
+                                    UpdateVault::ADD => {
+                                        *created_at = value.clone();
+                                        *updated_at = value;
+                                    }
+                                    UpdateVault::MODIFY => {
+                                        *updated_at = value;
+                                    }
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+                Secret::SSHKey { .. } => {
+                    if let Secret::SSHKey {
+                        username,
+                        email,
+                        pub_key,
+                        private_key,
+                        others,
+                        tags,
+                        created_at,
+                        updated_at,
+                    } = secret
+                    {
+                        for (field_name, value) in fields.into_iter() {
+                            match field_name.as_str() {
+                                "username" => *username = Some(value),
+                                "email" => *email = Some(value),
+                                "pub_key" => *pub_key = value,
+                                "private_key" => *private_key = value,
+                                "other_info" => {
+                                    let deserialized = from_str::<CustomFields>(&value)
+                                        .map_err(|_| Error::FailedToDeserialize)?;
+                                    for sub_secret in deserialized.0.fields.into_iter() {
+                                        others.fields.push(sub_secret);
+                                    }
+                                }
+                                "tag" => tags.push(Some(value)),
+                                "created_at" => match mutate_type {
+                                    UpdateVault::ADD => {
+                                        *created_at = value.clone();
+                                        *updated_at = value;
+                                    }
+                                    UpdateVault::MODIFY => {
+                                        *updated_at = value;
+                                    }
+                                },
+                                _ => {}
+                            }
+                        }
+                    }
+                }
+            }
+            return Ok(secret.clone());
         }
 
         pub fn encrypt_vault(&mut self, vault: Vault) -> Result<EncryptedVaultInfo> {
