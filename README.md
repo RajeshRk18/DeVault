@@ -28,13 +28,14 @@ Generate secure master password. Strength of internal encryption of your secrets
 
 - Run the command below.
 
-``` bash
-tr -dc 'A-Za-z0-9!@#$%^&*?' </dev/urandom | head -c 32 > master_pass.txt
+```bash
+set +o history
+cat /dev/urandom | tr -dc 'A-Za-z0-9!@#$%^&*?' | head -c 32 && echo
+set -o history
 ```
 
-- **Open** `master_pass.txt` and **note down the password in a paper** (please!!). ***Look carefully for lowercase and uppercase!**
+- **Note down the password in a paper** (please!!). ***Look carefully for lowercase and uppercase!**
 
-- **Delete** `master_pass.txt`! Phew..
 
 ### TODO
 
